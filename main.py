@@ -1,7 +1,7 @@
 import torch
 from abc import ABC, abstractmethod
 
-
+"""
 def calc_out_shape(input_matrix_shape, out_channels, kernel_size, stride, padding):
     batch_size, channels_count, input_height, input_width = input_matrix_shape
     output_height = (input_height + 2 * padding - kernel_size) // stride + 1
@@ -118,3 +118,7 @@ class Conv2dMatrix(ABCConv2d):
 # (раскомментируйте для самостоятельной проверки,
 #  в коде для сдачи задания должно быть закомментировано):
 print(test_conv2d_layer(Conv2dMatrix))
+"""
+
+
+
