@@ -1,5 +1,6 @@
 import torch
 
+
 def do_grad_dis_step(func, x, lr=0.01):
     func_x = func(x)
     func_x.backward()
