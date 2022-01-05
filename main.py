@@ -1,251 +1,30 @@
-"""
 import torch
-from abc import ABC, abstractmethod
+import torch.nn as nn
 
 
-def calc_out_shape(input_matrix_shape, out_channels, kernel_size, stride, padding):
-    batch_size, channels_count, input_height, input_width = input_matrix_shape
-    output_height = (input_height + 2 * padding - kernel_size) // stride + 1
-    output_width = (input_width + 2 * padding - kernel_size) // stride + 1
-
-    return batch_size, out_channels, output_height, output_width
+eps = 1e-10
 
 
-class ABCConv2d(ABC):
-    def __init__(self, in_channels, out_channels, kernel_size, stride):
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.kernel_size = kernel_size
-        self.stride = stride
-
-    def set_kernel(self, kernel):
-        self.kernel = kernel
-
-    @abstractmethod
-    def __call__(self, input_tensor):
-        pass
-
-
-class Conv2d(ABCConv2d):
-    def __init__(self, in_channels, out_channels, kernel_size, stride):
-        self.conv2d = torch.nn.Conv2d(in_channels, out_channels, kernel_size,
-                                      stride, padding=0, bias=False)
-
-    def set_kernel(self, kernel):
-        self.conv2d.weight.data = kernel
-
-    def __call__(self, input_tensor):
-        return self.conv2d(input_tensor)
-
-
-def create_and_call_conv2d_layer(conv2d_layer_class, stride, kernel, input_matrix):
-    out_channels = kernel.shape[0]
-    in_channels = kernel.shape[1]
-    kernel_size = kernel.shape[2]
-
-    layer = conv2d_layer_class(in_channels, out_channels, kernel_size, stride)
-    layer.set_kernel(kernel)
-
-    return layer(input_matrix)
-
-
-def test_conv2d_layer(conv2d_layer_class, batch_size=2,
-                      input_height=4, input_width=4, stride=2):
-    kernel = torch.tensor(
-        [[[[0., 1, 0],
-           [1, 2, 1],
-           [0, 1, 0]],
-
-          [[1, 2, 1],
-           [0, 3, 3],
-           [0, 1, 10]],
-
-          [[10, 11, 12],
-           [13, 14, 15],
-           [16, 17, 18]]]])
-
-    in_channels = kernel.shape[1]
-
-    input_tensor = torch.arange(0, batch_size * in_channels *
-                                input_height * input_width,
-                                out=torch.FloatTensor()) \
-        .reshape(batch_size, in_channels, input_height, input_width)
-
-    custom_conv2d_out = create_and_call_conv2d_layer(
-        conv2d_layer_class, stride, kernel, input_tensor)
-    conv2d_out = create_and_call_conv2d_layer(
-        Conv2d, stride, kernel, input_tensor)
-
-    return torch.allclose(custom_conv2d_out, conv2d_out) \
-           and (custom_conv2d_out.shape == conv2d_out.shape)
-
-
-class Conv2dMatrix(ABCConv2d):
-    # Функция преобразование кернела в матрицу нужного вида.
-    def _unsqueeze_kernel(self, torch_input, output_height, output_width):
-        channels = torch_input.shape[1]
-        input_size = torch_input.shape[2]
-        kernel_unsqueezed = torch.zeros(output_width * output_height, input_size ** 2 * channels)
-        for channel in range(channels):
-            line = 0
-            for i in range(output_height):
-                for j in range(output_width):
-                    pred = torch.zeros(input_size, input_size)
-                    current_row = self.stride * i
-                    current_column = self.stride * j
-                    pred[current_row:current_row + self.kernel_size, current_column:current_column + self.kernel_size] = \
-                        self.kernel[0][channel]
-                    kernel_unsqueezed[line, channel * (input_size ** 2):(channel+1) * (input_size ** 2)] = pred.flatten()
-                    line += 1
-
-        return kernel_unsqueezed
-
-    def __call__(self, torch_input):
-        batch_size, out_channels, output_height, output_width \
-            = calc_out_shape(
-            input_matrix_shape=torch_input.shape,
-            out_channels=self.kernel.shape[0],
-            kernel_size=self.kernel.shape[2],
-            stride=self.stride,
-            padding=0)
-
-        kernel_unsqueezed = self._unsqueeze_kernel(torch_input, output_height, output_width)
-        result = kernel_unsqueezed @ torch_input.view((batch_size, -1)).permute(1, 0)
-        return result.permute(1, 0).view((batch_size, self.out_channels,
-                                          output_height, output_width))
+def custom_layer_norm(input_tensor, eps):
+    normed_tensor = torch.zeros(input_tensor.shape)
+    for i in range(input_tensor.shape[0]):
+        avg = torch.mean(input_tensor[i, ])
+        mse = torch.var(input_tensor[i, ], unbiased=False)
+        normed_tensor[i] = (input_tensor[i] - avg) / (mse + eps) ** 0.5
+    return normed_tensor
 
 
 # Проверка происходит автоматически вызовом следующего кода
 # (раскомментируйте для самостоятельной проверки,
 #  в коде для сдачи задания должно быть закомментировано):
-print(test_conv2d_layer(Conv2dMatrix))
-"""
+all_correct = True
+for dim_count in range(3, 9):
+    input_tensor = torch.randn(*list(range(3, dim_count + 2)), dtype=torch.float)
+    layer_norm = nn.LayerNorm(input_tensor.size()[1:], elementwise_affine=False, eps=eps)
 
-import torch
-import random as rd
-
-# to fix results for each training
-rd.seed(0)
-
-# get dataset from sklearn - dataset about wines
-import sklearn.datasets
-
-wines = sklearn.datasets.load_wine()
-
-# print(wines.data.shape)
-
-# split to train and test sets
-from sklearn.model_selection import train_test_split
-
-X_train, X_test, y_train, y_test = train_test_split(wines.data[:, :2],
-                                                    wines.target,
-                                                    test_size=0.2,  # proportion of test
-                                                    shuffle=True)
-
-# make data useful for torch
-X_train = torch.FloatTensor(X_train)
-X_test = torch.FloatTensor(X_test)
-y_train = torch.LongTensor(y_train)
-y_test = torch.LongTensor(y_test)
-
-
-# NN architecture
-
-class Sommelier(torch.nn.Module):
-    def __init__(self, n_hidden_neurons):
-        super(Sommelier, self).__init__()
-        # use 3 fully connected layers with SoftMax on the output
-        # number of hidden neurons can be easily changed
-        self.fc1 = torch.nn.Linear(2, n_hidden_neurons)
-        self.act_fn1 = torch.nn.Sigmoid()
-        self.fc2 = torch.nn.Linear(n_hidden_neurons, n_hidden_neurons)
-        self.act_fn2 = torch.nn.Sigmoid()
-        # 3 neurons on output for each wine's class
-        self.fc3 = torch.nn.Linear(n_hidden_neurons, 3)
-        self.sm = torch.nn.Softmax(dim=1)
-
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.act_fn1(x)
-        x = self.fc2(x)
-        x = self.act_fn2(x)
-        x = self.fc3(x)
-        return x
-
-    # separate SoftMax for easily compute cross-entropy
-    def inference(self, x):
-        x = self.forward(x)
-        x = self.sm(x)
-        return x
-
-
-wine_sommelier = Sommelier(6)
-
-loss_fn = torch.nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(wine_sommelier.parameters(), lr=0.003)
-
-# make batch training
-import numpy as np
-
-batch_size = 20
-
-for epoch in range(1000):
-    # shuffle data for each epoch
-    order = np.random.permutation(len(X_train))
-    for start in range(0, len(X_train), batch_size):
-        optimizer.zero_grad()
-
-        batch_indexes = order[start:start + batch_size]
-        # make a batch of data
-        x_b = X_train[batch_indexes]
-        y_b = y_train[batch_indexes]
-
-        pred = wine_sommelier.forward(x_b)
-
-        loss = loss_fn(pred, y_b)
-        loss.backward()
-
-        optimizer.step()
-    # check progress once a 50 epochs
-    if epoch % 50 == 0:
-        test_preds = wine_sommelier.forward(X_test)
-        test_preds = test_preds.argmax(dim=1)
-        print((test_preds == y_test).float().mean())
-
-    # get accuracy around 0.7
-
-# visualize some data
-
-import matplotlib.pyplot as plt
-
-plt.rcParams['figure.figsize'] = (10, 8)
-
-n_classes = 3
-plot_colors = ['g', 'orange', 'black']
-plot_step = 0.02
-
-x_min, x_max = X_train[:, 0].min() - 1, X_train[:, 0].max() + 1
-y_min, y_max = X_train[:, 1].min() - 1, X_train[:, 1].max() + 1
-
-xx, yy =  torch.meshgrid(torch.arange(x_min, x_max, plot_step),
-                         torch.arange(y_min, y_max, plot_step))
-
-preds = wine_sommelier.inference(
-    torch.cat([xx.reshape(-1, 1), yy.reshape(-1, 1)], dim=1))
-
-preds_class = preds.data.numpy().argmax(axis=1)
-preds_class = preds_class.reshape(xx.shape)
-plt.contourf(xx, yy, preds_class, cmap='Accent')
-
-for i, color in zip(range(n_classes), plot_colors):
-    indexes = np.where(y_train == i)
-    plt.scatter(X_train[indexes, 0],
-                X_train[indexes, 1],
-                c=color,
-                label=wines.target_names[i],
-                cmap='Accent')
-    plt.xlabel(wines.feature_names[0])
-    plt.ylabel(wines.feature_names[1])
-    plt.legend()
-
-plt.show()
+    norm_output = layer_norm(input_tensor)
+    custom_output = custom_layer_norm(input_tensor, eps)
+    all_correct &= torch.allclose(norm_output, custom_output, 1e-2)
+    all_correct &= norm_output.shape == custom_output.shape
+    print("current is ", all_correct)
+print("for all", all_correct)
