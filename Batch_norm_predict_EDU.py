@@ -14,8 +14,8 @@ class CustomBatchNorm1d:
         self.eps = eps
         self.momentum = momentum
         self.eva = False
-        # Реализуйте в этом месте конструктор.
 
+    # конструктор
     def __call__(self, input_tensor):
         normed_tensor =  torch.zeros(input_tensor.shape) # Напишите в этом месте нормирование входного тензора.
         for i in range(input_tensor.shape[1]):
@@ -32,10 +32,10 @@ class CustomBatchNorm1d:
                             input_tensor.shape[0] - 1) + self.momentum * self.running_var[i]
         return normed_tensor
 
-
+    # переключение в режим предикта.
     def eval(self):
         self.eva = True
-        # В этом методе реализуйте переключение в режим предикта.
+       
 
 
 batch_norm = nn.BatchNorm1d(input_size, eps=eps)
@@ -47,8 +47,6 @@ custom_batch_norm1d = CustomBatchNorm1d(batch_norm.weight.data,
                                         batch_norm.bias.data, eps, batch_norm.momentum)
 
 # Проверка происходит автоматически вызовом следующего кода
-# (раскомментируйте для самостоятельной проверки,
-#  в коде для сдачи задания должно быть закомментировано):
 all_correct = True
 
 for i in range(8):
