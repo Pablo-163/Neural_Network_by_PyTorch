@@ -13,7 +13,6 @@ def custom_batch_norm1d(input_tensor, weight, bias, eps):
         avg = input_tensor[:,i].sum() / input_tensor.shape[0]
         mse = ((input_tensor[:,i] - avg)**2).sum() / input_tensor.shape[0]
         normed_tensor[:, i] = (input_tensor[:,i] - avg) / (mse + eps)**0.5 * weight[i] + bias[i]
-     # Напишите в этом месте нормирование входного тензора
     return normed_tensor
 
 # Check that works fine
